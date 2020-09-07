@@ -1,3 +1,5 @@
+#define RXD2 16
+#define TXD2 17
 //AWS iot 
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
@@ -38,7 +40,10 @@ TaskHandle_t WaterMonitoring;
 char message[200];
 void setup() {
   Serial.begin(115200);
-
+  //UART communication setup
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  Serial.println("Serial Txd is on pin: "+String(TX));
+  Serial.println("Serial Rxd is on pin: "+String(RX));
   // Start WiFi
   Serial.println("Connecting to ");
   Serial.print(ssid);
@@ -81,12 +86,26 @@ void setup() {
 }
 //AWSpHDataCode: waits for arduino mega to send ph data, then messages AWS IOT Core
 void AWSpHDataCode( void * pvParameters ){
+  Serial.print("AWSpHDataCode running on core ");
+  Serial.println(xPortGetCoreID());
+  //waits for the arduino mega to send ph data
+  char input[4];
   while(1){
-    Serial.print("AWSpHDataCode running on core ");
-    Serial.println(xPortGetCoreID());
+    while (Serial2.available()) {
+      delay(100);
+      for(int i=0; i<5; i++){
+        if(i==4){
+          input[i]='\0';
+          break;
+        }
+        input[i] =Serial2.read();
+      }
+      Serial.println(input);
+    }
+    delay(100);
     mqttLoop();
-    mqttClient.publish(pubTopic, "hello from ph data");
-    delay(10000);
+    //mqttClient.publish(pubTopic, "hello from ph data");
+    //delay(10000);
   }
 }
 
