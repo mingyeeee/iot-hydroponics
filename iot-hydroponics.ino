@@ -28,32 +28,75 @@ const char* privateKey = myPrivateKey;
 
 WiFiClientSecure httpsClient;
 PubSubClient mqttClient(httpsClient);
+
+//------------MultiThreading-----------
+TaskHandle_t AWSpHData;
+TaskHandle_t WaterMonitoring;
+
 //-----------------my vars------------------
 
 char message[200];
 void setup() {
-    Serial.begin(115200);
+  Serial.begin(115200);
 
-    // Start WiFi
-    Serial.println("Connecting to ");
-    Serial.print(ssid);
-    WiFi.begin(ssid, password);
+  // Start WiFi
+  Serial.println("Connecting to ");
+  Serial.print(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected.");
+   // Configuring MQTT Client
+  httpsClient.setCACert(rootCA);
+  httpsClient.setCertificate(certificate);
+  httpsClient.setPrivateKey(privateKey);
+  mqttClient.setServer(endpoint, port);
+  mqttClient.setCallback(mqttCallback);
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nConnected.");
+  connectAWSIoT();
 
-    // Configuring MQTT Client
-    httpsClient.setCACert(rootCA);
-    httpsClient.setCertificate(certificate);
-    httpsClient.setPrivateKey(privateKey);
-    mqttClient.setServer(endpoint, port);
-    mqttClient.setCallback(mqttCallback);
+  //create a task that will be executed in the AWSpHDataCode() function, with priority 1 and executed on core 0
+  xTaskCreatePinnedToCore(
+                    AWSpHDataCode,   /* Task function. */
+                    "AWSpHData",     /* name of task. */
+                    10000,       /* Stack size of task */
+                    NULL,        /* parameter of the task */
+                    1,           /* priority of the task */
+                    &AWSpHData,      /* Task handle to keep track of created task */
+                    0);          /* pin task to core 0 */                  
+  delay(500); 
 
-    connectAWSIoT();
-    //on connection report the off state for the sprinkler, if it should be on, delta will publish
+  //create a task that will be executed in the WaterMonitoringCode() function, with priority 1 and executed on core 1
+  xTaskCreatePinnedToCore(
+                    WaterMonitoringCode,   /* Task function. */
+                    "WaterMonitoring",     /* name of task. */
+                    10000,       /* Stack size of task */
+                    NULL,        /* parameter of the task */
+                    1,           /* priority of the task */
+                    &WaterMonitoring,      /* Task handle to keep track of created task */
+                    1);          /* pin task to core 1 */
+    delay(500); 
+}
+//AWSpHDataCode: waits for arduino mega to send ph data, then messages AWS IOT Core
+void AWSpHDataCode( void * pvParameters ){
+  while(1){
+    Serial.print("AWSpHDataCode running on core ");
+    Serial.println(xPortGetCoreID());
+    mqttLoop();
+    mqttClient.publish(pubTopic, "hello from ph data");
+    delay(10000);
+  }
+}
+
+//WaterMonitoringCode: Monitors the recevoir's water level. a dip in water levels indicates blockage
+void WaterMonitoringCode( void * pvParameters ){
+  while(1){
+    Serial.print("Water monitoring running on core ");
+    Serial.println(xPortGetCoreID());
+    delay(700);
+  }
 }
 
 void connectAWSIoT() {
@@ -81,7 +124,6 @@ void mqttCallback (char* topic, byte* payload, unsigned int length) {
         Serial.print((char)payload[i]);
         message[i] = (char)payload[i];
     }
-    
 }
 
 void mqttLoop() {
@@ -94,7 +136,5 @@ void mqttLoop() {
 
   
 void loop() {
-  mqttLoop();
-  mqttClient.publish(pubTopic, "hello");
-  delay(10000);
+  
 }
