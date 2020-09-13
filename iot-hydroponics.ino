@@ -70,7 +70,7 @@ void setup() {
                     NULL,        /* parameter of the task */
                     1,           /* priority of the task */
                     &AWSpHData,      /* Task handle to keep track of created task */
-                    0);          /* pin task to core 0 */                  
+                    1);          /* pin task to core 0 */                  
   delay(500); 
 
   //create a task that will be executed in the WaterMonitoringCode() function, with priority 1 and executed on core 1
@@ -81,39 +81,41 @@ void setup() {
                     NULL,        /* parameter of the task */
                     1,           /* priority of the task */
                     &WaterMonitoring,      /* Task handle to keep track of created task */
-                    1);          /* pin task to core 1 */
+                    0);          /* pin task to core 1 */
     delay(500); 
 }
 //AWSpHDataCode: waits for arduino mega to send ph data, then messages AWS IOT Core
 void AWSpHDataCode( void * pvParameters ){
   Serial.print("AWSpHDataCode running on core ");
   Serial.println(xPortGetCoreID());
-  //waits for the arduino mega to send ph data
-  char input[4];
+  delay(500);
+  char input[6];
   while(1){
-    while (Serial2.available()) {
-      delay(100);
-      for(int i=0; i<5; i++){
-        if(i==4){
-          input[i]='\0';
-          break;
+    char input[6];
+    int counter = 0;
+    if(Serial2.available()>0){
+      Serial.println("Uart message available. Retrieving now...");
+      Serial.println(Serial2.available());
+      while (Serial2.available()>0) {
+        input[counter]=(char)Serial2.read();
+        if(Serial2.available() == 1){
+          Serial.println(Serial2.available());
+          input[counter+1]='\0';
         }
-        input[i] =Serial2.read();
+        counter++;
       }
-      Serial.println(input);
-    }
-    delay(100);
+    Serial.println(input);
     mqttLoop();
-    //mqttClient.publish(pubTopic, "hello from ph data");
-    //delay(10000);
+    mqttClient.publish(pubTopic, input);
+    }
   }
 }
 
 //WaterMonitoringCode: Monitors the recevoir's water level. a dip in water levels indicates blockage
 void WaterMonitoringCode( void * pvParameters ){
   while(1){
-    Serial.print("Water monitoring running on core ");
-    Serial.println(xPortGetCoreID());
+    //Serial.print("Water monitoring running on core ");
+    //Serial.println(xPortGetCoreID());
     delay(700);
   }
 }
